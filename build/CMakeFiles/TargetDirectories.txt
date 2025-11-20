@@ -1,0 +1,3 @@
+E:/projects/c-learning/modbus-parser/build/CMakeFiles/modbus_parser.dir
+E:/projects/c-learning/modbus-parser/build/CMakeFiles/edit_cache.dir
+E:/projects/c-learning/modbus-parser/build/CMakeFiles/rebuild_cache.dir

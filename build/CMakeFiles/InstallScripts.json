@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"E:/projects/c-learning/modbus-parser/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
