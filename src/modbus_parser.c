@@ -1,3 +1,27 @@
+/*
+ * modbus_parser.c - Modbus TCP protocol parser implementation
+ *
+ * Implements complete Modbus TCP frame parsing, validation, display,
+ * and security analysis. Handles all standard function codes, exception
+ * responses, and generates comprehensive security reports.
+ *
+ * Key components:
+ * - MBAP header parsing and validation
+ * - Function code decoding (0x01-0x2B plus exceptions)
+ * - Dual display modes (table/verbose)
+ * - Security analysis (exception rate, scanning, timing)
+ * - Markdown report generation
+ *
+ * Security analysis detects:
+ * - High exception rates (>20%)
+ * - Sequential function code scanning
+ * - Rapid burst patterns (<0.1s intervals)
+ * - Wide function code coverage
+ * Copyright (C) 2025 Marty
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+
 #include "modbus_parser.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,8 +35,29 @@
     #include <arpa/inet.h>  // *nix: For ntohs (network to host short)
 #endif
 
-// Minimum Modbus TCP frame size: MBAP (7) + Function Code (1)
+
+/*
+ * Minimum valid Modbus TCP frame size in bytes
+ * MBAP header (7 bytes) + Function code (1 byte) = 8 bytes minimum
+ * Data field is optional and varies by function code
+ */
+
 #define MIN_MODBUS_FRAME_SIZE 8
+
+
+/*
+ * modbus_get_function_name() - Get human-readable function code name
+ * @function_code: Modbus function code (0x00-0xFF)
+ *
+ * Maps function codes to descriptive names. Handles standard functions
+ * (0x01-0x2B) including obsolete codes, and detects exception responses
+ * (0x80+ bit set).
+ *
+ * Return: Static string with function name (never NULL)
+ *         "Exception Response" for codes with high bit set (0x80+)
+ *         "Unknown/Reserved Function" for undefined codes
+ *         String must not be freed by caller
+ */
 
 const char* modbus_get_function_name(uint8_t function_code) {
     // Check for exception response (high bit set)
@@ -63,6 +108,19 @@ const char* modbus_get_function_name(uint8_t function_code) {
     }
 }
 
+
+/**
+ * modbus_get_exception_name() - Get human-readable exception code name
+ * @exception_code: Exception code from exception response (0x01-0x0B)
+ *
+ * Maps exception codes to descriptive error messages.
+ * Used when function_code >= 0x80 indicates an exception response.
+ *
+ * Return: Static string with exception description (never NULL)
+ *         "Unknown Exception" for undefined codes
+ *         String must not be freed by caller
+ */
+
 const char* modbus_get_exception_name(uint8_t exception_code) {
     switch(exception_code) {
         case MODBUS_EXCEPTION_ILLEGAL_FUNCTION:
@@ -89,11 +147,32 @@ const char* modbus_get_exception_name(uint8_t exception_code) {
 }
 
 
+/**
+ * modbus_parse_frame() - Parse Modbus TCP frame from raw bytes
+ * @payload: Raw frame data (MBAP header + PDU)
+ * @payload_len: Length of payload in bytes
+ * @frame: Output structure to populate
+ *
+ * Parses and validates Modbus TCP frame structure:
+ * 1. Validates minimum size (8 bytes)
+ * 2. Extracts MBAP header fields (big-endian)
+ * 3. Validates protocol ID (must be 0x0000)
+ * 4. Validates length field consistency
+ * 5. Extracts function code
+ * 6. Allocates and copies data field (if present)
+ *
+ * Memory management:
+ * - Allocates frame->data via malloc() if data_length > 0
+ * - Caller MUST call modbus_free_frame() to release memory
+ * - On failure, no memory is allocated
+ *
+ * Return: true if frame parsed successfully (frame populated)
+ *         false if validation failed or allocation error
+ */
+
 bool modbus_parse_frame(const uint8_t *payload, uint32_t payload_len, modbus_tcp_frame_t *frame) {
     // Validate minimum size
     if (payload_len < MIN_MODBUS_FRAME_SIZE) {
-       // printf("Error: Payload too short (%u bytes, minimum %d)\n", 
-       //        payload_len, MIN_MODBUS_FRAME_SIZE);
         return false;
     }
 
@@ -132,6 +211,30 @@ bool modbus_parse_frame(const uint8_t *payload, uint32_t payload_len, modbus_tcp
 
     return true;
 }
+
+
+/**
+ * modbus_display_frame_table() - Display frame in compact table format
+ * @frame: Parsed frame to display
+ * @src_ip: Source IP address string
+ * @src_port: Source TCP port
+ * @dst_ip: Destination IP address string
+ * @dst_port: Destination TCP port
+ * @packet_number: Sequence number for display
+ * @timestamp: Packet timestamp (seconds since epoch)
+ * @is_first: If true, print table header first
+ *
+ * Outputs single-line table row with ANSI color coding:
+ * - Cyan: IP addresses
+ * - Yellow: Transaction ID
+ * - Green: Unit ID
+ * - Magenta: Function code
+ * - Blue: Data details
+ *
+ * Call with is_first=true only for the first frame to print header.
+ * Formats timestamp as HH:MM:SS.microseconds.
+ * Decodes function-specific data fields (addresses, quantities, etc.).
+ */
 
 void modbus_display_frame_table(const modbus_tcp_frame_t *frame,
                                 const char *src_ip, uint16_t src_port,
@@ -199,11 +302,32 @@ void modbus_display_frame_table(const modbus_tcp_frame_t *frame,
            COLOR_WHITE, packet_number, COLOR_RESET,
            COLOR_GRAY, time_str, COLOR_RESET,
            COLOR_CYAN, src, dst, COLOR_RESET,
-           COLOR_YELLOW, frame->mbap.transaction_id, COLOR_RESET,
+           COLOR_YELLOW, frame->mbap.transaction_id, COLOR_RESET, 
            COLOR_GREEN, frame->mbap.unit_id, COLOR_RESET,
            COLOR_MAGENTA, func_name, COLOR_RESET,
            COLOR_BLUE, addr_qty, COLOR_RESET);
 }
+
+
+/**
+ * modbus_display_frame() - Display detailed verbose frame breakdown
+ * @frame: Parsed frame to display
+ *
+ * Outputs multi-line detailed frame analysis to stdout:
+ * - MBAP header fields (transaction ID, protocol ID, length, unit ID)
+ * - Function code with descriptive name
+ * - Function-specific data decoding
+ *
+ * Function-specific decoding includes:
+ * - 0x03/0x04 (Read Registers): Start address + quantity
+ * - 0x06 (Write Single Register): Address + value
+ * - 0x10 (Write Multiple Registers): Start address + quantity + byte count
+ * - 0x80+ (Exception): Exception code + description
+ * - Others: Hex dump of data
+ *
+ * Suitable for debugging and protocol analysis.
+ * Use modbus_display_frame_table() for bulk processing.
+ */
 
 void modbus_display_frame(const modbus_tcp_frame_t *frame) {
     printf("\n=== Modbus TCP Frame ===\n");
@@ -239,6 +363,18 @@ void modbus_display_frame(const modbus_tcp_frame_t *frame) {
     printf("\n========================\n");
 }
 
+
+/**
+ * modbus_free_frame() - Free memory allocated by modbus_parse_frame()
+ * @frame: Frame structure to clean up
+ *
+ * Releases dynamically allocated data field and zeros pointers.
+ * Safe to call multiple times or on failed parse (checks for NULL).
+ * Does not free the frame structure itself (typically stack-allocated).
+ *
+ * Must be called for every successfully parsed frame to prevent memory leaks.
+ */
+
 void modbus_free_frame(modbus_tcp_frame_t *frame) {
     if (frame->data != NULL) {
         free(frame->data);
@@ -246,6 +382,31 @@ void modbus_free_frame(modbus_tcp_frame_t *frame) {
     }
 }
 
+
+/**
+ * modbus_uppdate_attack_stats() - Update security statistics for frame
+ * @stats: Statistics structure to update
+ * @frame: Parsed frame to analyze
+ * @timestamp: Frame timestamp for timing analysis
+ *
+ * Accumulates per-frame security metrics:
+ * - Total frame count
+ * - Exception response count (function_code >= 0x80)
+ * - Unique function codes seen
+ * - Sequential pattern detection (3+ consecutive codes)
+ * - Timing analysis (first/last packet, burst detection)
+ *
+ * Burst detection: Frames < 0.1 seconds apart are flagged as rapid bursts
+ * which may indicate automated scanning or flood attempts.
+ *
+ * Sequential pattern: Detects 3+ consecutive function codes
+ * (e.g., 0x01, 0x02, 0x03) suggesting systematic enumeration.
+ *
+ * Call once per frame during processing.
+ * Initialize stats to zero before first call.
+ * Call modbus_display_attack_summary() or modbus_write_report_summary()
+ * after all frames processed.
+ */
 
 void modbus_update_attack_stats(attack_stats_t *stats, const modbus_tcp_frame_t *frame, double timestamp) {
     // Initialise timing on first frame
@@ -301,6 +462,25 @@ void modbus_update_attack_stats(attack_stats_t *stats, const modbus_tcp_frame_t 
         }
     }
 }
+
+
+/**
+ * modbus_display_attack_summary() - Display security analysis to console
+ * @stats: Finalized statistics structure
+ *
+ * Outputs security analysis summary to stdout with ANSI color coding:
+ * - Exception rate analysis
+ * - Threat indicators (scanning, unusual patterns)
+ * - Timing analysis (burst detection)
+ * - Function code coverage
+ *
+ * Threat thresholds:
+ * - Exception rate >20%: Potential scanning or misconfiguration
+ * - Sequential pattern detected: Systematic enumeration
+ * - High burst count: Automated tools or flood attempts
+ *
+ * Call after processing all frames and calculating final metrics.
+ */
 
 void modbus_display_attack_summary(const attack_stats_t *stats) {
     printf("\n%s=== Security Analysis ===%s\n", COLOR_WHITE, COLOR_RESET);
@@ -376,8 +556,24 @@ void modbus_display_attack_summary(const attack_stats_t *stats) {
 }
 
 
+/**
+ * modbus_open_report() - Open markdown report file for writing
+ * @stats: Statistics structure to initialize
+ * @pcap_filename: Base filename (e.g., "capture.pcap")
+ *
+ * Creates report file with naming convention:
+ * <pcap_filename>_analysis.md
+ *
+ * Initializes report_file handle in stats structure.
+ * Sets report_enabled flag on success.
+ *
+ * Return: true if file opened successfully
+ *         false if file creation failed
+ *
+ * On failure, prints error message and disables reporting.
+ */
+
 bool modbus_open_report(attack_stats_t *stats, const char *pcap_filename) {
-    printf("DEBUG: modbus_open_report() called with: %s\n", pcap_filename);
 
     // Build report filename from PCAP filename
     char report_filename[512];
@@ -414,7 +610,6 @@ bool modbus_open_report(attack_stats_t *stats, const char *pcap_filename) {
     strcat(report_filename, "_analysis.md");
     
     // Open file for writing
-    printf("DEBUG: Attempting to create: %s\n", report_filename);
     stats->report_file = fopen(report_filename, "w");
     if (!stats->report_file) {
         printf("Error: Could not create report file: %s\n", report_filename);
@@ -425,6 +620,22 @@ bool modbus_open_report(attack_stats_t *stats, const char *pcap_filename) {
     stats->report_enabled = true;
     return true;
 }
+
+
+/**
+ * modbus_write_report_header() - Write markdown report header
+ * @stats: Statistics structure with open report file
+ * @pcap_filename: Original PCAP filename for metadata
+ *
+ * Writes:
+ * - Report title ("Modbus TCP Security Analysis Report")
+ * - Generation timestamp
+ * - Source file reference
+ * - Traffic summary table header
+ *
+ * Call once after modbus_open_report() and before writing frames.
+ * No-op if report not enabled.
+ */
 
 void modbus_write_report_header(attack_stats_t *stats, const char *pcap_filename) {
     if (!stats->report_enabled || !stats->report_file) return;
@@ -442,6 +653,30 @@ void modbus_write_report_header(attack_stats_t *stats, const char *pcap_filename
     fprintf(f, "| Packet | Timestamp | Source | Destination | Trans ID | Unit | Function | Details |\n");
     fprintf(f, "|--------|-----------|--------|-------------|----------|------|----------|---------|\n");
 }
+
+
+/**
+ * modbus_write_report_frame() - Write single frame entry to report
+ * @stats: Statistics structure with open report file
+ * @frame: Parsed frame to report
+ * @src_ip: Source IP address
+ * @src_port: Source TCP port
+ * @dst_ip: Destination IP address
+ * @dst_port: Destination TCP port
+ * @packet_number: Frame sequence number
+ * @timestamp: Frame timestamp (seconds since epoch)
+ *
+ * Writes markdown table row containing:
+ * - Packet number
+ * - Formatted timestamp (HH:MM:SS.microseconds)
+ * - Source and destination addresses
+ * - Transaction ID, Unit ID
+ * - Function code with name
+ * - Function-specific details
+ *
+ * Call once per frame during PCAP processing.
+ * No-op if report not enabled.
+ */
 
 void modbus_write_report_frame(attack_stats_t *stats, const modbus_tcp_frame_t *frame,
                                 const char *src_ip, uint16_t src_port,
@@ -499,6 +734,30 @@ void modbus_write_report_frame(attack_stats_t *stats, const modbus_tcp_frame_t *
             packet_number, time_str, src, dst, frame->mbap.transaction_id, 
             frame->mbap.unit_id, func_name, details);
 }
+
+
+/**
+ * modbus_write_report_summary() - Write security analysis section
+ * @stats: Finalized statistics structure
+ * @function_counts: Array of 256 per-function-code counters
+ *
+ * Writes markdown sections:
+ * - Security Analysis header
+ * - Exception rate analysis
+ * - Threat indicators (scanning, bursts)
+ * - Timing analysis (duration, frame rate, bursts)
+ * - Function code summary table
+ * - Function code coverage
+ *
+ * Calculates and displays:
+ * - Exception rate percentage
+ * - Average frame rate (frames/second)
+ * - Total capture duration
+ * - Threat assessments based on thresholds
+ *
+ * Call once after all frames processed.
+ * No-op if report not enabled.
+ */
 
 void modbus_write_report_summary(attack_stats_t *stats, const uint32_t *function_counts) {
     if (!stats->report_enabled || !stats->report_file) return;
@@ -579,6 +838,18 @@ void modbus_write_report_summary(attack_stats_t *stats, const uint32_t *function
     }
     fprintf(f, "\n");
 }
+
+
+/**
+ * modbus_write_report_summary() - Close report file and clean up
+ * @stats: Statistics structure with open report file
+ *
+ * Flushes and closes report file handle.
+ * Sets report_file to NULL.
+ * No-op if report not enabled.
+ *
+ * Call after modbus_write_report_summary() to finalize report.
+ */
 
 void modbus_close_report(attack_stats_t *stats) {
     if (!stats->report_enabled || !stats->report_file) return;

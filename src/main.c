@@ -1,3 +1,23 @@
+/*
+ * main.c - Modbus TCP Parser - Main entry point and orchestration
+ *
+ * Command-line application for parsing Modbus TCP traffic from PCAP files.
+ * Provides frame-by-frame analysis, security threat detection, and
+ * comprehensive markdown reporting.
+ *
+ * Features:
+ * - Dual display modes (table/verbose)
+ * - Security analysis (scanning, timing, exceptions)
+ * - Markdown report generation
+ * - Color-coded terminal output
+ *
+ * Usage: modbus-parser [options] <pcap_file>
+ *
+ * Copyright (C) 2025 Marty
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,7 +26,18 @@
 #include "modbus_parser.h"
 #include "colors.h"
 
-// Context for processing
+
+/**
+ * struct process_context - Processing context passed to frame callback
+ * @mode: Display format (table or verbose)
+ * @frame_count: Total frames successfully parsed
+ * @functon_counts: Per-function-code usage counters
+ * @attack_stats: Security analysis accumulator
+ *
+ * Aggregates state across all processed frames including display mode,
+ * frame counters, function code statistics, and security analysis.
+ */
+
 typedef struct {
     display_mode_t mode;
     uint32_t frame_count;
@@ -14,7 +45,33 @@ typedef struct {
     attack_stats_t attack_stats; // Attack detection statistics.
 } process_context_t;
 
-// Callback function to process each Modbus TCP payload
+
+
+/**
+ * process_modbus_payload() - Callback function to process each Modbus TCP 
+ * payload
+ * 
+ * @payload: Raw Modbus TCP frame data (MBAP + PDU)
+ * @length: Payload length in bytes
+ * @src_ip: Source IP address
+ * @src_port: Source TCP port
+ * @dst_ip: Destination IP address
+ * @dst_port: Destination TCP port
+ * @timestamp: Frame timestamp (seconds since epoch)
+ * @user_data: Pointer to process_context_t structure
+ *
+ * Invoked by pcap_reader for each Modbus TCP frame found in PCAP.
+ * 
+ * Processing flow:
+ * 1. Parse frame via modbus_parse_frame()
+ * 2. Display frame (table or verbose mode)
+ * 3. Write to report file (if enabled)
+ * 4. Update statistics (frame count, function codes, security)
+ * 5. Free frame resources
+ *
+ * Parse failures are silently skipped (verbose mode shows error).
+ */
+
 void process_modbus_payload(const uint8_t *payload, uint32_t length,
                             const char *src_ip, uint16_t src_port,
                             const char *dst_ip, uint16_t dst_port,
@@ -53,6 +110,19 @@ void process_modbus_payload(const uint8_t *payload, uint32_t length,
     }
 }
 
+
+/**
+ * print_usage() - Display command-line usage information
+ * @program_name: Name of the executable (argv[0])
+ *
+ * Outputs help text including:
+ * - Usage syntax
+ * - Available options (-v, -r, -h)
+ * - Usage examples
+ *
+ * Called when -h/--help specified or on argument errors.
+ */
+
 void print_usage(const char *program_name) {
     printf("Usage: %s [options] <pcap_file>\n", program_name);
     printf("\nOptions:\n");
@@ -66,6 +136,20 @@ void print_usage(const char *program_name) {
     printf("  %s -v -r capture.pcap        # Verbose + report\n", program_name);
 }
 
+
+/**
+ * print_color_legend() - Display color coding reference
+ *
+ * Outputs legend explaining ANSI color usage in table mode:
+ * - Cyan: IP addresses
+ * - Yellow: Transaction IDs
+ * - Green: Unit IDs
+ * - Magenta: Function codes
+ * - Blue: Data fields
+ *
+ * Displayed once at start in table mode to help users interpret output.
+ */
+
 void print_color_legend() {
     printf("\n%sColor Legend:%s\n", COLOR_WHITE, COLOR_RESET);
     printf("  %sCyan: IP Addresses%s | ", COLOR_CYAN, COLOR_RESET);
@@ -74,6 +158,26 @@ void print_color_legend() {
     printf("%sMagenta: Function%s | ", COLOR_MAGENTA, COLOR_RESET);
     printf("%sBlue: Data%s\n", COLOR_BLUE, COLOR_RESET);
 }
+
+
+/**
+ * main() - Applicaiton entry point
+ * @argc: Argument count
+ * @argv: Argument vector
+ *
+ * Command-line parser and PCAP processing orchestrator.
+ *
+ * Flow:
+ * 1. Parse command-line arguments (-v, -r, filename)
+ * 2. Initialize processing context
+ * 3. Open report file (if -r specified)
+ * 4. Process PCAP via pcap_process_file()
+ * 5. Display function code summary
+ * 6. Display security analysis
+ * 7. Finalize and close report
+ *
+ * Return: 0 on success, 1 on error
+ */
 
 int main(int argc, char *argv[]) {
     display_mode_t mode = DISPLAY_TABLE;  // Default to table format
@@ -122,7 +226,6 @@ int main(int argc, char *argv[]) {
     };
     
         // Open report file if requested
-        printf("DEBUG: generate_report = %d\n", generate_report);
         if (generate_report) {
         if (!modbus_open_report(&ctx.attack_stats, filename)) {
             printf("Warning: Report generation disabled due to file error\n");
@@ -147,7 +250,7 @@ int main(int argc, char *argv[]) {
     printf("%s--------------------------------------------------------%s\n", COLOR_GRAY, COLOR_RESET);
     
     for (int i = 0; i < 256; i++) {
-        if (ctx.function_counts[1] > 0) {
+        if (ctx.function_counts[i] > 0) {
             printf("%s%-40s %s%u%s\n",
             COLOR_MAGENTA, modbus_get_function_name(i),
             COLOR_CYAN, ctx.function_counts[i], COLOR_RESET);

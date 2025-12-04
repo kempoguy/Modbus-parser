@@ -1,7 +1,14 @@
 # ninja log v7
 3	81	7853829570834479	CMakeFiles/modbus_parser.dir/src/main.c.obj	7b50140fc592f769
 3	563	7853831498477182	CMakeFiles/modbus_parser.dir/src/pcap_reader.c.obj	ceea9db41f022e04
-3	449	7853834771454743	CMakeFiles/modbus_parser.dir/src/modbus_parser.c.obj	26967a482fde2113
-449	514	7853834775921504	modbus_parser.exe	dabb18d584f25648
 3	447	7853835035225122	CMakeFiles/modbus_parser.dir/src/modbus_parser.c.obj	26967a482fde2113
 447	512	7853835039665121	modbus_parser.exe	dabb18d584f25648
+1186	4106	7865118633746091	CMakeFiles/modbus_parser.dir/src/main.c.obj	184530352026d699
+1190	9316	7865118633776103	CMakeFiles/modbus_parser.dir/src/pcap_reader.c.obj	bbf719d3bfb06647
+1192	9498	7865118633796081	CMakeFiles/modbus_parser.dir/src/modbus_parser.c.obj	f2b103a3fc7fbb75
+9499	10816	7865118716866906	modbus_parser.exe	192a78e211946b47
+1	8	7865121240014445	clean	5a0fa5c14190f11d
+3	63	7865121240174477	CMakeFiles/modbus_parser.dir/src/main.c.obj	184530352026d699
+5	412	7865121240204454	CMakeFiles/modbus_parser.dir/src/pcap_reader.c.obj	bbf719d3bfb06647
+7	428	7865121240224453	CMakeFiles/modbus_parser.dir/src/modbus_parser.c.obj	f2b103a3fc7fbb75
+428	494	7865121244431292	modbus_parser.exe	192a78e211946b47

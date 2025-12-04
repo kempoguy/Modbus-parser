@@ -1,3 +1,23 @@
+/*
+ * pcap_reader.c - PCAP file processing and Modbus TCP traffic extraction
+ *
+ * Implements packet capture file parsing using libpcap. Handles layer
+ * extraction (Ethernet/IP/TCP), port filtering (502), and payload
+ * extraction for Modbus TCP frames.
+ *
+ * Key features:
+ * - Robust PCAP parsing via libpcap
+ * - Automatic layer skipping (Ethernet, IP options, TCP options)
+ * - Port 502 filtering (source or destination)
+ * - IP address formatting
+ * - Timestamp conversion
+ * - Cross-platform support (Windows/Linux/macOS)
+ *
+ * Copyright (C) 2025 Marty
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+
 #include "pcap_reader.h"
 #include <stdio.h>
 #include <sys/time.h>
@@ -9,19 +29,42 @@
     #include <arpa/inet.h> // *nix: Same
 #endif
 
-// Ethernet header size
+
+/* Network protocol header sizes and constants */
+
+/* Ethernet header size */
 #define ETHERNET_HEADER_SIZE 14
 
-// IP header minimum size
+/* IP header minimum size */
 #define IP_HEADER_MIN_SIZE 20
 
-// TCP header minimum size
+/* TCP header minimum size */
 #define TCP_HEADER_MIN_SIZE 20
 
-// Modbus TCP port
+/* Modbus TCP port */
 #define MODBUS_TCP_PORT 502
 
-// IP header structure (simplified)
+
+/**
+ * struct ip_header_t - Simplified IPv4 header structure
+ *
+ * @version_ihl: Version (4 bits) IHL/Header Length (4 bits)
+ * @tos: Type of Service
+ * @total_length: Total packet length including header
+ * @identification: Fragment identification
+ * @flags_fragment: Flags (3 bits) + Fragment offset (13 bits)
+ * @ttl: Time to Live
+ * @protocol: Protocol (6 = TCP, 17 = UDP)
+ * @checksum: Header checksum
+ * @source_ip: Source IP Address (network byte order)
+ * @dest_ip: Destination IP Address (network byte order)
+ * 
+ * Minimum IPv4 header fields needed for Modbus TCP extraction.
+ * Does not include IP options (if present, calculated via IHL).
+ *
+ * Wire format: 20 bytes minimum (no options)
+ */
+
 typedef struct {
     uint8_t version_ihl;        // Version (4 bits) + IHL (4 bits)
     uint8_t tos;
@@ -35,7 +78,25 @@ typedef struct {
     uint32_t dest_ip;
 } ip_header_t;
 
-// TCP header structure (simplified)
+
+/**
+ * struct tcp_header_t - TCP header structure (simplified)
+ * @source_port: Source port number (network byte order)
+ * @dest_port: Destination port number (networ kbyte order)
+ * @seq_number: Sequence number
+ * @ack_number: Acknowledgement number
+ * @data_offset_reserved: Data offset (4 bits) + reserved (4 bits)
+ * @flags: TCP flags (SYN, ACK, FIN, etc.)
+ * @window: Window size
+ * @checksum: Header + data checksum
+ * @urgent_pointer: Urgent pointer
+ *
+ * Minimum TCP header fields needed for port extraction and payload location.
+ * Does not include TCP options (if present, calculated via data offset).
+ *
+ * Wire format: 20 bytes minimum (no options)
+ */
+
 typedef struct {
     uint16_t source_port;
     uint16_t dest_port;
@@ -47,6 +108,39 @@ typedef struct {
     uint16_t checksum;
     uint16_t urgent_pointer;
 } tcp_header_t;
+
+
+/**
+ * pcap_process_file() - Oricess PCAP file and extract MOdbus TCP payloads
+ * @filename: Path to PCAP file (relative or absolute)
+ * @callback: Function to invoke for each Modbus TCP frame
+ * @user_data: Opaque pointer passed to callback
+ *
+ * Opens PCAP file via libpcap, iterates through all packets, and invokes
+ * callback for each TCP packet on port 502 (Modbus TCP).
+ *
+ * Processing flow:
+ * 1. Open PCAP file (pcap_open_offline)
+ * 2. For each packet:
+ *    a. Validate minimum size (Ethernet + IP + TCP headers)
+ *    b. Skip Ethernet header (14 bytes)
+ *    c. Parse IP header, extract IHL for variable length
+ *    d. Check protocol == 6 (TCP)
+ *    e. Parse TCP header, extract data offset for variable length
+ *    f. Check port == 502 (source or destination)
+ *    g. Calculate payload offset and extract data
+ *    h. Format IP addresses as strings
+ *    i. Convert timestamp to double (seconds.microseconds)
+ *    j. Invoke callback with payload and metadata
+ * 3. Close PCAP file
+ *
+ * Non-TCP packets and non-port-502 traffic are silently skipped.
+ * Empty payloads (e.g., TCP ACK without data) are skipped.
+ * Malformed packets are skipped with no error.
+ *
+ * Return: true if file processed successfully (even if 0 Modbus frames)
+ *         false if file open failed or read error occurred
+ */
 
 bool pcap_process_file(const char *filename, modbus_payload_callback_t callback, void *user_data) {
     char errbuf[PCAP_ERRBUF_SIZE];
@@ -121,19 +215,6 @@ bool pcap_process_file(const char *filename, modbus_payload_callback_t callback,
         }
 
         modbus_count++;
-      //  printf("--- Packet %u (Modbus TCP Frame %u) ---\n", packet_count, modbus_count);
-      //  printf("Source: %u.%u.%u.%u:%u\n",
-      //         (ntohl(ip_hdr->source_ip) >> 24) & 0xFF,
-      //        (ntohl(ip_hdr->source_ip) >> 16) & 0xFF,
-      //         (ntohl(ip_hdr->source_ip) >> 8) & 0xFF,
-      //         ntohl(ip_hdr->source_ip) & 0xFF,
-      //         src_port);
-      //  printf("Dest:   %u.%u.%u.%u:%u\n",
-      //         (ntohl(ip_hdr->dest_ip) >> 24) & 0xFF,
-      //         (ntohl(ip_hdr->dest_ip) >> 16) & 0xFF,
-      //         (ntohl(ip_hdr->dest_ip) >> 8) & 0xFF,
-      //         ntohl(ip_hdr->dest_ip) & 0xFF,
-      //         dst_port);
 
         // Format IP addresses
         char src_ip_str[16], dst_ip_str[16];

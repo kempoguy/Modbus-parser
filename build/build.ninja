@@ -52,21 +52,21 @@ build cmake_object_order_depends_target_modbus_parser: phony || .
 build CMakeFiles/modbus_parser.dir/src/main.c.obj: C_COMPILER__modbus_parser_unscanned_Debug E$:/projects/c-learning/modbus-parser/src/main.c || cmake_object_order_depends_target_modbus_parser
   CONFIG = Debug
   DEP_FILE = CMakeFiles\modbus_parser.dir\src\main.c.obj.d
-  FLAGS = -g -g -O0 -Wall -Wextra -std=gnu17
+  FLAGS = -Wall -Wextra -g -g -O0 -Wall -Wextra -std=gnu17
   OBJECT_DIR = CMakeFiles\modbus_parser.dir
   OBJECT_FILE_DIR = CMakeFiles\modbus_parser.dir\src
 
 build CMakeFiles/modbus_parser.dir/src/pcap_reader.c.obj: C_COMPILER__modbus_parser_unscanned_Debug E$:/projects/c-learning/modbus-parser/src/pcap_reader.c || cmake_object_order_depends_target_modbus_parser
   CONFIG = Debug
   DEP_FILE = CMakeFiles\modbus_parser.dir\src\pcap_reader.c.obj.d
-  FLAGS = -g -g -O0 -Wall -Wextra -std=gnu17
+  FLAGS = -Wall -Wextra -g -g -O0 -Wall -Wextra -std=gnu17
   OBJECT_DIR = CMakeFiles\modbus_parser.dir
   OBJECT_FILE_DIR = CMakeFiles\modbus_parser.dir\src
 
 build CMakeFiles/modbus_parser.dir/src/modbus_parser.c.obj: C_COMPILER__modbus_parser_unscanned_Debug E$:/projects/c-learning/modbus-parser/src/modbus_parser.c || cmake_object_order_depends_target_modbus_parser
   CONFIG = Debug
   DEP_FILE = CMakeFiles\modbus_parser.dir\src\modbus_parser.c.obj.d
-  FLAGS = -g -g -O0 -Wall -Wextra -std=gnu17
+  FLAGS = -Wall -Wextra -g -g -O0 -Wall -Wextra -std=gnu17
   OBJECT_DIR = CMakeFiles\modbus_parser.dir
   OBJECT_FILE_DIR = CMakeFiles\modbus_parser.dir\src
 
@@ -80,7 +80,7 @@ build CMakeFiles/modbus_parser.dir/src/modbus_parser.c.obj: C_COMPILER__modbus_p
 
 build modbus_parser.exe: C_EXECUTABLE_LINKER__modbus_parser_Debug CMakeFiles/modbus_parser.dir/src/main.c.obj CMakeFiles/modbus_parser.dir/src/pcap_reader.c.obj CMakeFiles/modbus_parser.dir/src/modbus_parser.c.obj | E$:/msys64/ucrt64/lib/libpcap.dll.a
   CONFIG = Debug
-  FLAGS = -g -g -O0 -Wall -Wextra
+  FLAGS = -Wall -Wextra -g -g -O0 -Wall -Wextra
   LINK_LIBRARIES = E:/msys64/ucrt64/lib/libpcap.dll.a  -lws2_32  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\modbus_parser.dir
   POST_BUILD = cd .
